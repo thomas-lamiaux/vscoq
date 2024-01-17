@@ -3,7 +3,7 @@
 (*                                 VSCoq                                  *)
 (*                                                                        *)
 (*                   Copyright INRIA and contributors                     *)
-(*       (see version control and README file for authors & dates)        *)
+(*       (see version control and README file for authors & dates)Variables A : Type.        *)
 (*                                                                        *)
 (**************************************************************************)
 (*                                                                        *)
@@ -47,7 +47,7 @@ module DiagnosticSeverity = struct
 
   let of_feedback_level = let open DiagnosticSeverity in function
     | Feedback.Error -> Some Error
-    | Feedback.Warning -> Some Warning
+    | Feedback.Warning _ -> Some Warning
     | Feedback.(Info | Debug | Notice) -> None
 
 end
@@ -69,7 +69,7 @@ module FeedbackChannel = struct
   | Feedback.Debug -> Some Debug
   | Feedback.Info -> Some Info 
   | Feedback.Notice -> Some Notice 
-  | Feedback.(Error | Warning) -> None
+  | Feedback.(Error | Warning _) -> None
 
 end
 
