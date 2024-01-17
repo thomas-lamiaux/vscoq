@@ -3,13 +3,6 @@ import { Position, Range, Uri } from "vscode";
 
 type Nullable<T> = T | null;
 
-export enum FeedbackChannel {
-    debug, 
-    info, 
-    notice, 
-    ignore
-}
-
 export type PpTag = string;
 
 export type BlockType =
@@ -28,38 +21,38 @@ export type PpString =
   | ["Ppcmd_force_newline"]
   | ["Ppcmd_comment", string[]];
 
-export interface CoqFeedback {
-    range: Range;
-    message: string;
-    channel: FeedbackChannel;
-}
-
-export interface CoqFeedbackNotification {
-    uri: Uri; 
-    feedback: CoqFeedback[]
-}
-
-export interface Hypothesis {
-    identifiers: string[];
-    type: PpString;
+interface Error {
+    code: integer; 
+    message: string; 
 }
 
 export interface Goal {
     id: integer;
     goal: PpString;
-    hypotheses: Hypothesis[];
+    hypotheses: PpString[];
 }
-interface ProofViewNotificationType {
+
+export interface ProofViewGoals {
     goals: Goal[];
     shelvedGoals: Goal[];
     givenUpGoals: Goal[];
 }
 
-export type ProofViewNotification = Nullable<ProofViewNotificationType>;
+export enum MessageSeverity {
+    error = "Error",
+    warning = "Warning", 
+    info = "Information"
+}
 
-export interface UpdateHightlightsNotification {
+export type CoqMessage = [MessageSeverity, PpString];
+
+export interface ProofViewNotification {
+    proof: Nullable<ProofViewGoals>;
+    messages: CoqMessage[];
+}
+
+export interface UpdateHighlightsNotification {
     uri: Uri; 
-    parsedRange: Range[];
     processingRange: Range[];
     processedRange: Range[];
 }
@@ -78,15 +71,17 @@ export interface SearchCoqRequest {
 
 export interface SearchCoqHandshake {
     id: string;
-    result?: boolean;
-    error?: any;
+}
 
+export interface QueryError {
+    code: integer; 
+    message: string; 
 }
 
 export interface SearchCoqResult {
     id: string;
-    name: string; 
-    statement: string;
+    name: PpString; 
+    statement: PpString;
 }
 
 export interface AboutCoqRequest {
@@ -96,7 +91,7 @@ export interface AboutCoqRequest {
     goalIndex?: number;
 }
 
-export type AboutCoqResponse = string;
+export type AboutCoqResponse = PpString;
 
 export interface CheckCoqRequest {
     textDocument: VersionedTextDocumentIdentifier;
@@ -105,7 +100,7 @@ export interface CheckCoqRequest {
     goalIndex?: number;
 };
 
-export type CheckCoqResponse = string; 
+export type CheckCoqResponse = PpString; 
 
 export interface LocateCoqRequest {
     textDocument: VersionedTextDocumentIdentifier;
@@ -113,7 +108,7 @@ export interface LocateCoqRequest {
     position: Position;
 };
 
-export type LocateCoqResponse = string; 
+export type LocateCoqResponse = PpString; 
 
 export interface PrintCoqRequest {
     textDocument: VersionedTextDocumentIdentifier;
@@ -121,7 +116,7 @@ export interface PrintCoqRequest {
     position: Position;
 };
 
-export type PrintCoqResponse = string; 
+export type PrintCoqResponse = PpString; 
 
 export interface DocumentStateRequest {
     textDocument: TextDocumentIdentifier;
@@ -130,3 +125,9 @@ export interface DocumentStateRequest {
 export interface DocumentStateResponse {
     document: string;
 }
+
+export interface ResetCoqRequest {
+    textDocument: TextDocumentIdentifier;
+}
+
+export interface ResetCoqResponse {};

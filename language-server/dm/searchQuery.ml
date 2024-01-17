@@ -13,15 +13,15 @@
 (**************************************************************************)
 open Util
 open Printer
+open Protocol.Printing
 open Protocol.LspWrapper
 
 (* Note: this queue is not very useful today, as we process results in the main
 vscoq process, which does not allow for real asynchronous processing of results. *)
 let query_results_queue = Queue.create ()
 
-let query_feedback : notification Sel.event =
-  Sel.on_queue query_results_queue (fun x -> QueryResultNotification x)
-  |> Sel.uncancellable
+let query_feedback : notification Sel.Event.t =
+  Sel.On.queue query_results_queue (fun x -> QueryResultNotification x)
 
 let interp_search ~id env sigma s r =
   let pr_search ref _kind env sigma c =
@@ -31,8 +31,8 @@ let interp_search ~id env sigma s r =
     let impargs = select_stronger_impargs impls in
     let impargs = List.map binding_kind_of_status impargs in
     let pc = pr_ltype_env env sigma ~impargs c in
-    let name = Pp.string_of_ppcmds pr in
-    let statement = Pp.string_of_ppcmds pc in
+    let name = pp_of_coqpp pr in
+    let statement = pp_of_coqpp pc in
     Queue.push { id; name; statement } query_results_queue
   in
   let r = ComSearch.interp_search_restriction r in

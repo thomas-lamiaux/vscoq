@@ -16,6 +16,7 @@ open Types
 open Lsp.Types
 open Protocol
 open Protocol.LspWrapper
+open Protocol.Printing
 open CompletionItems
 
 (** The document manager holds the view that Coq has of the currently open
@@ -23,14 +24,16 @@ open CompletionItems
     and get feedback. Note that it does not require IDEs to parse vernacular
     sentences. *)
 
+type observe_id = Id of Types.sentence_id | Top
+
 type state
 
 type event
 val pp_event : Format.formatter -> event -> unit
 
-type events = event Sel.event list
+type events = event Sel.Event.t list
 
-val init : Vernacstate.t -> opts:Coqargs.injection_command list -> DocumentUri.t -> text:string -> state * events
+val init : Vernacstate.t -> opts:Coqargs.injection_command list -> DocumentUri.t -> text:string -> observe_id option -> state * events
 (** [init st opts uri text] initializes the document manager with initial vernac state
     [st] on which command line opts will be set. *)
 
@@ -39,7 +42,13 @@ val apply_text_edits : state -> text_edit list -> state
     document is parsed, outdated executions states are invalidated, and the observe
     id is updated. *)
 
-val interpret_to_position : stateful:bool -> state -> Position.t -> (state * events)
+val clear_observe_id : state -> state
+(** [clear_observe_id state] updates the state to make the observe_id None *)
+
+val reset_to_top : state -> state
+(** [reset_to_top state] updates the state to make the observe_id Top *)
+
+val interpret_to_position : state -> Position.t -> (state * events)
 (** [interpret_to_position stateful doc pos] navigates to the last sentence ending
     before or at [pos] and returns the resulting state. The [stateful] flag 
     determines if we record the resulting position in the state. *)
@@ -64,10 +73,8 @@ val reset : state -> state * events
 (** resets Coq *)
 
 type exec_overview = {
-  parsed : Range.t list;
-  checked : Range.t list;
-  checked_by_delegate : Range.t list;
-  legacy_highlight : Range.t list;
+  processing : Range.t list;
+  processed : Range.t list;
 }
 
 val executed_ranges : state -> exec_overview
@@ -77,35 +84,33 @@ val executed_ranges : state -> exec_overview
 val observe_id_range : state -> Range.t option
 (** returns the range of the sentence referenced by observe_id **)
 
-val diagnostics : state -> Diagnostic.t list
-(** diagnostics [doc] returns the diagnostics corresponding to the sentences
+val get_messages : state -> Position.t option -> (DiagnosticSeverity.t * pp) list
+
+val all_diagnostics : state -> Diagnostic.t list
+(** all_diagnostics [doc] returns the diagnostics corresponding to the sentences
     that have been executed in [doc]. *)
 
-val feedbacks : state -> CoqFeedback.t list
-(** feedback [doc] returns notice, info and debug level feedbacks from coq corresponding
-    to the sentences that have been executed in [doc]. *)
-
-val get_proof : state -> Position.t option -> ProofState.t option
+val get_proof : state -> Settings.Goals.Diff.Mode.t -> Position.t option -> ProofState.t option
 
 val get_completions : state -> Position.t -> (completion_item list, string) Result.t
 
 val handle_event : event -> state -> (state option * events)
 (** handles events and returns a new state if it was updated *)
 
-val search : state -> id:string -> Position.t -> string -> notification Sel.event list
+val search : state -> id:string -> Position.t -> string -> notification Sel.Event.t list
 
-val about : state -> Position.t -> pattern:string -> (string,string) Result.t
+val about : state -> Position.t -> pattern:string -> (pp,string) Result.t
 
 val hover : state -> Position.t -> MarkupContent.t option
 (** Returns an optional Result:
     if None, the position did not have a word,
     if Some, an Ok/Error result is returned. *)
 
-val check : state -> Position.t -> pattern:string -> (string,string) Result.t
+val check : state -> Position.t -> pattern:string -> (pp,string) Result.t
 
-val locate : state -> Position.t -> pattern:string -> (string, string) Result.t
+val locate : state -> Position.t -> pattern:string -> (pp, string) Result.t
 
-val print : state -> Position.t -> pattern:string -> (string, string) Result.t
+val print : state -> Position.t -> pattern:string -> (pp, string) Result.t
 
 
 module Internal : sig
@@ -114,7 +119,7 @@ module Internal : sig
   val raw_document : state -> RawDocument.t
   val execution_state : state -> ExecutionManager.state
   val string_of_state : state -> string
-  val observe_id : state -> Types.sentence_id option
+  val observe_id : state -> sentence_id option
 
   val validate_document : state -> state
   (** [validate_document doc] reparses the text of [doc] and invalidates the

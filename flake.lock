@@ -1,6 +1,6 @@
 {
   "nodes": {
-    "coq-master": {
+    "coq-8_18": {
       "inputs": {
         "flake-utils": "flake-utils",
         "nixpkgs": [
@@ -74,7 +74,7 @@
     },
     "root": {
       "inputs": {
-        "coq-master": "coq-master",
+        "coq-8_18": "coq-8_18",
         "flake-utils": "flake-utils_2",
         "nixpkgs": "nixpkgs"
       }

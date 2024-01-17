@@ -4,7 +4,7 @@
   "description": "VsCoq is an extension for Visual Studio Code with support for the Coq Proof Assistant",
   "publisher": "maximedenes",
   "license": "MIT",
-  "version": "1.9.1",
+  "version": "2.0.3",
   "repository": {
     "type": "git",
     "url": "https://github.com/coq-community/vscoq.git"
@@ -118,6 +118,21 @@
             ],
             "default": "List",
             "description": "Determines wether multiple goals should be displayed in different tabs or as a list of collapsible items."
+          },
+          "vscoq.goals.diff.mode": {
+            "type": "string",
+            "enum": [
+              "off",
+              "on",
+              "removed"
+            ],
+            "default": "off",
+            "markdownDescription": "Controls VsCoq's diff mode. If `on`, only added characters are displayed. If `removed` is selected, both added and removed characters are shown."
+          },
+          "vscoq.goals.messages.full": {
+            "type": "boolean",
+            "default": false,
+            "markdownDescription": "Include warning and errors in proofview messages"
           }
         }
       },
@@ -201,9 +216,26 @@
             "description": "Configures the ranking algorithm for auto completions in Coq."
           }
         }
+      },
+      {
+        "title": "Diagnostics",
+        "type": "object",
+        "properties": {
+          "vscoq.diagnostics.full": {
+            "scope": "window",
+            "type": "boolean",
+            "default": false,
+            "description": "Include info in diagnostics"
+          }
+        }
       }
     ],
     "commands": [
+      {
+        "command": "extension.coq.reset",
+        "category": "Coq",
+        "title": "Reset"
+      },
       {
         "command": "extension.coq.displayGoals",
         "category": "Coq",
@@ -244,23 +276,27 @@
         "command": "extension.coq.interpretToPoint",
         "category": "Coq",
         "title": "Interpret to point",
-        "description": "Interprets the current coq file until the given point"
+        "description": "Interprets the current coq file until the given point",
+        "enablement": "config.vscoq.proof.mode == 0"
       },
       {
         "command": "extension.coq.interpretToEnd",
         "category": "Coq",
         "title": "Interpret to end",
-        "description": "Interprets the current coq file until the end"
+        "description": "Interprets the current coq file until the end",
+        "enablement": "config.vscoq.proof.mode == 0"
       },
       {
         "command": "extension.coq.stepForward",
         "title": "Step Forward",
-        "category": "Coq"
+        "category": "Coq",
+        "enablement": "config.vscoq.proof.mode == 0"
       },
       {
         "command": "extension.coq.stepBackward",
         "title": "Step Backward",
-        "category": "Coq"
+        "category": "Coq",
+        "enablement": "config.vscoq.proof.mode == 0"
       },
       {
         "command": "extension.coq.documentState",
@@ -277,16 +313,45 @@
         "command": "extension.coq.collapseAllQueries",
         "title": "Collapse All",
         "category": "Coq",
-        "icon": "$(collapse-all)"
+        "icon": "$(collapse-all)",
+        "enablement": "vscoq.hasSearchResults"
       },
       {
         "command": "extension.coq.expandAllQueries",
         "title": "Expand All",
         "category": "Coq",
-        "icon": "$(expand-all)"
+        "icon": "$(expand-all)",
+        "enablement": "vscoq.hasSearchResults"
       }
     ],
     "menus": {
+       "editor/context": [
+        {
+          "when": "resourceLangId == coq",
+          "command": "extension.coq.interpretToPoint",
+          "group": "navigation"
+        },
+        {
+          "when": "resourceLangId == coq",
+          "command": "extension.coq.query.check",
+          "group": "queries"
+        },
+        {
+          "when": "resourceLangId == coq",
+          "command": "extension.coq.query.print",
+          "group": "queries"
+        },
+        {
+          "when": "resourceLangId == coq",
+          "command": "extension.coq.query.search",
+          "group": "queries"
+        },
+        {
+          "when": "resourceLangId == coq",
+          "command": "extension.coq.query.locate",
+          "group": "queries"
+        }
+      ], 
       "view/title": [
         {
           "command": "extension.coq.addQueryTab",
@@ -301,6 +366,7 @@
         {
           "command": "extension.coq.expandAllQueries",
           "group": "navigation",
+          "enablement": "editorHasSelection",
           "when": "view == vscoq.search && !vscoq.expandedQueries"
         }
       ]
@@ -471,16 +537,34 @@
         "id": "coq.addedCharacter",
         "description": "Color of added characters (in diffs).",
         "defaults": {
-          "dark": "#00fa001a",
+          "dark": "#00fa0033",
           "light": "#00fa0033",
           "highContrast": "#00fa0033"
+        }
+      },
+      {
+        "id": "coq.addedCharacterBackground",
+        "description": "Color of added characters (in diffs).",
+        "defaults": {
+          "dark": "#00fa000f",
+          "light": "#00fa000f",
+          "highContrast": "#00fa000f"
         }
       },
       {
         "id": "coq.removedCharacter",
         "description": "Color of removed characters (in diffs).",
         "defaults": {
-          "dark": "#fa000099",
+          "dark": "#fa000066",
+          "light": "#fa000066",
+          "highContrast": "#fa000066"
+        }
+      },
+      {
+        "id": "coq.removedCharacterBackground",
+        "description": "Color of removed characters (in diffs).",
+        "defaults": {
+          "dark": "#fa000033",
           "light": "#fa000033",
           "highContrast": "#fa000033"
         }

@@ -60,6 +60,48 @@ module Proof = struct
 
 end
 
+module Goals = struct
+
+  module Messages = struct
+
+    type t = {
+      full : bool;
+    } [@@deriving yojson]
+
+  end
+
+  module Diff = struct
+
+    module Mode = struct
+
+      type t = On | Off | Removed
+
+      let t_of_yojson = function
+      | `String "on" -> On
+      | `String "off" -> Off
+      | `String "removed" -> Removed
+      | _ -> Yojson.json_error "invalid value "
+
+      let yojson_of_t = function
+      | On -> `String "on"
+      | Off -> `String "off"
+      | Removed -> `String "removed"
+
+    end
+
+    type t = {
+      mode: Mode.t;
+    } [@@deriving yojson] [@@yojson.allow_extra_fields]
+
+  end
+
+  type t = {
+    diff: Diff.t;
+    messages: Messages.t;
+  } [@@deriving yojson] [@@yojson.allow_extra_fields]
+
+end
+
 module Completion = struct
   
   module RankingAlgoritm = struct
@@ -89,8 +131,18 @@ module Completion = struct
 
 end
 
+module Diagnostics = struct
+
+  type t = {
+    enable: bool [@default true]; (** Sets whether diagnostics like errors and highlighting are sent to the client at all. *)
+    full: bool;
+  } [@@deriving yojson]
+
+end
+
 type t = {
   proof: Proof.t;
+  goals: Goals.t;
   completion: Completion.t;
-  enableDiagnostics: bool [@default true]; (** Sets whether diagnostics like errors and highlighting are sent to the client at all. *)
+  diagnostics: Diagnostics.t;
 } [@@deriving yojson] [@@yojson.allow_extra_fields]

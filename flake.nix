@@ -10,10 +10,10 @@
 
   };
 
-  outputs = { self, nixpkgs, flake-utils, coq-master }:
+  outputs = { self, nixpkgs, flake-utils, coq-8_18 }:
     flake-utils.lib.eachDefaultSystem (system:
   
-   let coq = coq-master.defaultPackage.${system}; in
+   let coq = coq-8_18.defaultPackage.${system}; in
    rec {
 
     packages.default = self.packages.${system}.vscoq-language-server;
@@ -25,7 +25,7 @@
       ocamlPackages.buildDunePackage {
         duneVersion = "3";
         pname = "vscoq-language-server";
-        version = "1.9.1";
+        version = "2.0.3";
         src = ./language-server;
         buildInputs = [
           coq
@@ -51,6 +51,7 @@
           sexplib
           ppx_yojson_conv
           lsp
+          sel
         ]);
       };
 

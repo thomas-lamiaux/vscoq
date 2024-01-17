@@ -20,7 +20,7 @@ let Log log = Log.mk_log "executionManager"
 
 type execution_status =
   | Success of Vernacstate.t option
-  | Error of string Loc.located * Vernacstate.t option (* State to use for resiliency *)
+  | Error of Pp.t Loc.located * Vernacstate.t option (* State to use for resiliency *)
 
 let success vernac_st = Success (Some vernac_st)
 let error loc msg vernac_st = Error ((loc,msg),(Some vernac_st))
@@ -73,7 +73,7 @@ type state = {
   doc_id : document_id; (* unique number used to interface with Coq's Feedback *)
   coq_feeder : coq_feedback_listener;
   sel_feedback_queue : (Feedback.route_id * sentence_id * (Feedback.level * Loc.t option * Pp.t)) Queue.t;
-  sel_cancellation_handle : Sel.cancellation_handle;
+  sel_cancellation_handle : Sel.Event.cancellation_handle;
 }
 
 let options = ref default_options
@@ -85,7 +85,7 @@ let is_diagnostics_enabled () = !options.enableDiagnostics
 let get_options () = !options
 
 type prepared_task =
-  | PSkip of { id: sentence_id; error: string option }
+  | PSkip of { id: sentence_id; error: Pp.t option }
   | PExec of executable_sentence
   | PQuery of executable_sentence
   | PDelegate of { terminator_id: sentence_id;
@@ -116,14 +116,14 @@ end
 module ProofWorker = DelegationManager.MakeWorker(ProofJob)
 
 type event =
-  | LocalFeedback of Feedback.route_id * sentence_id * (Feedback.level * Loc.t option * Pp.t)
+  | LocalFeedback of (Feedback.route_id * sentence_id * (Feedback.level * Loc.t option * Pp.t)) Queue.t * Feedback.route_id * sentence_id * (Feedback.level * Loc.t option * Pp.t)
   | ProofWorkerEvent of ProofWorker.delegation
-type events = event Sel.event list
+type events = event Sel.Event.t list
 let pr_event = function
   | LocalFeedback _ -> Pp.str "LocalFeedback"
   | ProofWorkerEvent event -> ProofWorker.pr_event event
 
-let inject_proof_event = Sel.map (fun x -> ProofWorkerEvent x)
+let inject_proof_event = Sel.Event.map (fun x -> ProofWorkerEvent x)
 let inject_proof_events st l =
   (st, List.map inject_proof_event l)
 
@@ -154,7 +154,7 @@ let interp_ast ~doc_id ~state_id ~st ~error_recovery ast =
     Sys.(set_signal sigint (Signal_handle(fun _ -> raise Break)));
     let result =
       try Ok(Vernacinterp.interp_entry ~st ast,[])
-      with e when CErrors.noncritical e ->
+      with e -> (* we also catch anomalies *)
         let e, info = Exninfo.capture e in
         Error (e, info) in
     Sys.(set_signal sigint Signal_ignore);
@@ -177,7 +177,7 @@ let interp_ast ~doc_id ~state_id ~st ~error_recovery ast =
         *)
         let loc = Loc.get_loc info in
         let msg = CErrors.iprint (e, info) in
-        let status = error loc (Pp.string_of_ppcmds msg) st in
+        let status = error loc msg st in
         let st = interp_error_recovery error_recovery st in
         st, status, []
 
@@ -222,12 +222,8 @@ let update state id v =
   update_all id (Done v) fl state
 ;;
 
-let local_feedback feedback_queue : event Sel.event * Sel.cancellation_handle =
-  let e, c = Sel.on_queue feedback_queue (fun (rid,sid,msg) -> LocalFeedback(rid,sid,msg)) in
-  e |> Sel.name "feedback"
-    |> Sel.make_recurring
-    |> Sel.set_priority PriorityManager.feedback,
-  c
+let local_feedback feedback_queue : event Sel.Event.t =
+  Sel.On.queue ~name:"feedback" ~priority:PriorityManager.feedback feedback_queue (fun (rid,sid,msg) -> LocalFeedback(feedback_queue,rid,sid,msg))
 
 let install_feedback_listener doc_id send =
   let open Feedback in
@@ -240,7 +236,8 @@ let init vernac_state =
   let doc_id = fresh_doc_id () in
   let sel_feedback_queue = Queue.create () in
   let coq_feeder = install_feedback_listener doc_id (fun x -> Queue.push x sel_feedback_queue) in
-  let event, sel_cancellation_handle = local_feedback sel_feedback_queue in
+  let event = local_feedback sel_feedback_queue in
+  let sel_cancellation_handle = Sel.Event.get_cancellation_handle event in
   {
     initial = vernac_state;
     of_sentence = SM.empty;
@@ -256,7 +253,7 @@ let init vernac_state =
 let feedback_cleanup { coq_feeder; sel_feedback_queue; sel_cancellation_handle } =
   Feedback.del_feeder coq_feeder;
   Queue.clear sel_feedback_queue;
-  Sel.cancel sel_cancellation_handle
+  Sel.Event.cancel sel_cancellation_handle
 
 let handle_feedback id fb state =
   match fb with
@@ -271,8 +268,8 @@ let handle_feedback id fb state =
 
 let handle_event event state =
   match event with
-  | LocalFeedback (_,id,fb) ->
-      Some (handle_feedback id fb state), []
+  | LocalFeedback (q,_,id,fb) ->
+      Some (handle_feedback id fb state), [local_feedback q]
   | ProofWorkerEvent event ->
       let update, events = ProofWorker.handle_event event in
       let state =
@@ -303,12 +300,12 @@ let find_fulfilled_opt x m =
     | Delegated _ -> None
   with Not_found -> None
 
-let jobs : (DelegationManager.job_handle * Sel.cancellation_handle * ProofJob.t) Queue.t = Queue.create ()
+let jobs : (DelegationManager.job_handle * Sel.Event.cancellation_handle * ProofJob.t) Queue.t = Queue.create ()
 
 (* TODO: kill all Delegated... *)
 let destroy st =
   feedback_cleanup st;
-  Queue.iter (fun (h,c,_) -> DelegationManager.cancel_job h; Sel.cancel c) jobs
+  Queue.iter (fun (h,c,_) -> DelegationManager.cancel_job h; Sel.Event.cancel c) jobs
 
 
 let last_opt l = try Some (CList.last l).id with Failure _ -> None
@@ -376,7 +373,7 @@ let worker_ensure_proof_is_over vs send_back terminator_id =
         let e, info = Exninfo.capture e in
         let loc = Loc.get_loc info in
         let msg = CErrors.iprint (e, info) in
-        let status = error loc (Pp.string_of_ppcmds msg) vs in
+        let status = error loc msg vs in
         send_back (ProofJob.UpdateExecStatus (terminator_id,status))
 
 let worker_main { ProofJob.tasks; initial_vernac_state = vs; doc_id; terminator_id } ~send_back =
@@ -395,7 +392,7 @@ let worker_main { ProofJob.tasks; initial_vernac_state = vs; doc_id; terminator_
 
 let execute st (vs, events, interrupted) task =
   if interrupted then begin
-    let st = update st (id_of_prepared_task task) (Error ((None,"interrupted"),None)) in
+    let st = update st (id_of_prepared_task task) (Error ((None,Pp.str "interrupted"),None)) in
     (st, vs, events, true)
   end else
     try
@@ -437,7 +434,7 @@ let execute st (vs, events, interrupted) task =
                 Vernacstate.LemmaStack.with_top (Option.get @@ vernac_st.Vernacstate.interp.lemmas) ~f
               | Error ((loc,err),_) ->
                   log "Aborted future";
-                  assign (`Exn (CErrors.UserError(Pp.str err), Option.fold_left Loc.add_loc Exninfo.null loc))
+                  assign (`Exn (CErrors.UserError err, Option.fold_left Loc.add_loc Exninfo.null loc))
               with exn when CErrors.noncritical exn ->
                 assign (`Exn (CErrors.UserError(Pp.str "error closing proof"), Exninfo.null))
             in
@@ -448,12 +445,12 @@ let execute st (vs, events, interrupted) task =
                else
                  update_all id (Delegated (job_id,None)) [] st)
                st (List.map id_of_prepared_task tasks) in
-            let e, cancellation =
+            let e =
                 ProofWorker.worker_available ~jobs
                   ~fork_action:worker_main
                   ~feedback_cleanup:(fun () -> feedback_cleanup st)
                 in
-              Queue.push (job_id, cancellation, job) jobs;
+              Queue.push (job_id, Sel.Event.get_cancellation_handle e, job) jobs;
               (st, last_vs,events @ [inject_proof_event e] ,false)
           | _ ->
             (* If executing the proof opener failed, we skip the proof *)
@@ -461,7 +458,7 @@ let execute st (vs, events, interrupted) task =
             (st, vs,events,false)
           end
     with Sys.Break ->
-      let st = update st (id_of_prepared_task task) (Error ((None,"interrupted"),None)) in
+      let st = update st (id_of_prepared_task task) (Error ((None,Pp.str "interrupted"),None)) in
       (st, vs, events, true)
 
 let build_tasks_for sch st id =
@@ -489,17 +486,25 @@ let build_tasks_for sch st id =
   let vs, tasks = build_tasks id [] in
   vs, List.concat_map prepare_task tasks
 
-let errors st =
+let all_errors st =
   List.fold_left (fun acc (id, (p,_)) ->
     match p with
     | Done (Error ((loc,e),_st)) -> (id,(loc,e)) :: acc
     | _ -> acc)
     [] @@ SM.bindings st.of_sentence
 
-let mk_feedback id (lvl,loc,msg) = (id,(lvl,loc,Pp.string_of_ppcmds msg))
+let error st id =
+  match SM.find_opt id st.of_sentence with
+  | Some (Done (Error (err,_st)), _) -> Some err
+  | _ -> None
 
-let feedback st =
-  List.fold_left (fun acc (id, (_,l)) -> List.map (mk_feedback id) l @ acc) [] @@ SM.bindings st.of_sentence
+let feedback st id =
+  match SM.find_opt id st.of_sentence with
+  | None -> []
+  | Some (_st, l) -> l
+
+let all_feedback st =
+  List.fold_left (fun acc (id, (_,l)) -> List.map (fun x -> (id, x)) l @ acc) [] @@ SM.bindings st.of_sentence
 
 let shift_diagnostics_locs st ~start ~offset =
   let shift_loc loc =
@@ -565,7 +570,7 @@ let rec invalidate schedule id st =
     if terminator_id != id then
       Queue.push job jobs
     else begin
-      Sel.cancel cancellation;
+      Sel.Event.cancel cancellation;
       removed := tasks :: !removed
     end) old_jobs;
   let of_sentence = List.fold_left invalidate1 of_sentence

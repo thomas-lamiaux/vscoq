@@ -142,6 +142,18 @@ let find_sentence_after parsed loc =
   | Some (_, sentence) -> Some sentence
   | _ -> None
 
+let find_next_qed parsed loc =
+  let exception Found of sentence in
+  let f k sentence =
+    if loc <= k then
+    match sentence.ast.classification with
+    | VtQed _ -> raise (Found sentence)
+    | _ -> () in
+  (* We can't use find_first since f isn't monotone *)
+  match LM.iter f parsed.sentences_by_end with
+  | () -> None
+  | exception (Found n) -> Some n
+
 let get_first_sentence parsed = 
   Option.map snd @@ LM.find_first_opt (fun _ -> true) parsed.sentences_by_end
 
@@ -332,6 +344,7 @@ let validate_document ({ parsed_loc; raw_doc; } as document) =
   (* We take the state strictly before parsed_loc to cover the case when the
   end of the sentence is editted *)
   let (stop, synterp_state, _scheduler_state) = state_strictly_before document parsed_loc in
+  (* let top_id = find_sentence_strictly_before document parsed_loc with None -> Top | Some sentence -> Id sentence.id in *)
   let top_id = Option.map (fun sentence -> sentence.id) (find_sentence_strictly_before document parsed_loc) in
   let text = RawDocument.text raw_doc in
   let stream = Stream.of_string text in

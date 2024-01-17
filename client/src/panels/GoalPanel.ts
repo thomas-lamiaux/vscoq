@@ -1,8 +1,8 @@
 import { Disposable, Webview, WebviewPanel, window, workspace, Uri, ViewColumn, TextEditor, Position } from "vscode";
 import { ProofViewNotification } from '../protocol/types';
-import { LanguageClient } from "vscode-languageclient/node";
 import { getUri } from "../utilities/getUri";
 import { getNonce } from "../utilities/getNonce";
+import Client from "../client";
 
 // /////////////////////////////////////////////////////////////////////////////
 // GOAL VIEW PANEL CODE
@@ -23,7 +23,6 @@ export default class GoalPanel {
   public static currentPanel: GoalPanel | undefined;
   private readonly _panel: WebviewPanel;
   private _disposables: Disposable[] = [];
-  private static _channel: any = window.createOutputChannel('vscoq-goal-panel');
 
 
   /**
@@ -46,7 +45,7 @@ export default class GoalPanel {
     this._setWebviewMessageListener(this._panel.webview);
 
     //init the app settings
-    this._initWebAppSettings(this._panel.webview);
+    this._updateDisplaySettings(this._panel.webview);
   }
 
   /**
@@ -113,25 +112,58 @@ export default class GoalPanel {
   }
 
   // /////////////////////////////////////////////////////////////////////////////
+  // Change the goal display settings (gets triggered if the user changes 
+  // his settings)
+  // /////////////////////////////////////////////////////////////////////////////
+  public static toggleGoalDisplaySettings() {
+
+    if(GoalPanel.currentPanel) {
+        Client.writeToVscoq2Channel("[GoalPanel] Toggling display settings");
+        GoalPanel.currentPanel._updateDisplaySettings(GoalPanel.currentPanel._panel.webview);
+    }
+
+  }
+
+  // /////////////////////////////////////////////////////////////////////////////
+  // Reset the goal panel
+  //
+  // /////////////////////////////////////////////////////////////////////////////
+  public static resetGoalPanel() {
+
+    if(GoalPanel.currentPanel) {
+        Client.writeToVscoq2Channel("[GoalPanel] Resetting goal panel");
+        GoalPanel.currentPanel._reset();
+    }
+
+  }
+
+  // /////////////////////////////////////////////////////////////////////////////
   // Create the goal panel if it doesn't exit and then 
   // handle a proofview notification
   // /////////////////////////////////////////////////////////////////////////////
-  public static proofViewNotification(extensionUri: Uri, editor: TextEditor, client: LanguageClient, pv: ProofViewNotification) {
-     
-    this._channel.appendLine("Recieved proofview notification");
+  public static proofViewNotification(extensionUri: Uri, editor: TextEditor, pv: ProofViewNotification) {
+    
+    Client.writeToVscoq2Channel("[GoalPanel] Recieved proofview notification");
+
     if(!GoalPanel.currentPanel) {
         GoalPanel.render(editor, extensionUri, (goalPanel) => {
+            Client.writeToVscoq2Channel("[GoalPanel] Created new goal panel");
             goalPanel._handleProofViewResponseOrNotification(pv);
         });
     }
     else {
+        Client.writeToVscoq2Channel("[GoalPanel] Rendered in current panel");
         GoalPanel.currentPanel._handleProofViewResponseOrNotification(pv);
     }
     
   }
 
+  private _reset() {
+    this._panel.webview.postMessage({ "command": "reset"});
+  };
+
   private _handleProofViewResponseOrNotification(pv: ProofViewNotification) {
-    this._panel.webview.postMessage({ "command": "renderProofView", "proofView": pv });    
+    this._panel.webview.postMessage({ "command": "renderProofView", "proofView": pv });
   };
   
   /**
@@ -173,9 +205,9 @@ export default class GoalPanel {
   }
 
 
-  private _initWebAppSettings(webview: Webview) {
+  private _updateDisplaySettings(webview: Webview) {
     const config = workspace.getConfiguration('vscoq.goals');
-    webview.postMessage({ "command": "initAppSettings", "text": config.display });
+    webview.postMessage({ "command": "updateDisplaySettings", "text": config.display });
   };
 
   /**
@@ -200,3 +232,4 @@ export default class GoalPanel {
     );
   }
 }
+ 

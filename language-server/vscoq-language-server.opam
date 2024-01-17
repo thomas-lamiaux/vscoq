@@ -12,9 +12,11 @@ build: [
 ]
 depends: [
   "ocaml" { >= "4.13.1" }
-  "coq-core" { = "dev" }
-  "coq-stdlib" { = "dev" }
+  "dune" { >= "3.2" }
+  "coq-core" { >= "8.18" < "8.19" }
+  "coq-stdlib" { >= "8.18" < "8.19" }
   "yojson"
+  "jsonrpc" { >= "1.15"}
   "ocamlfind"
   "ppx_inline_test"
   "ppx_assert"
@@ -24,7 +26,9 @@ depends: [
   "sexplib"
   "ppx_yojson_conv"
   "ppx_import"
-  "lsp"
+  "result" { >= "1.5" }
+  "lsp" { >= "1.15"}
+  "sel" {>= "0.4.0"}
 ]
 synopsis: "VSCoq language server"
 description: """
