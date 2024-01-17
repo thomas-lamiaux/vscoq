@@ -132,7 +132,6 @@ let make_diagnostic doc range oloc message severity code =
     | Some (x,z) -> Some x, Some z in
   Diagnostic.create ?code ?data ~range ~message ~severity ()
 
-
 let mk_diag st (id,(lvl,oloc,msg)) =
   let code =
     match lvl with
@@ -149,8 +148,8 @@ let mk_diag st (id,(lvl,oloc,msg)) =
               | Some loc ->
                 RawDocument.range_of_loc (Document.raw_document st.document) loc
             in
-            yojson_of_list (fun x -> x) [Range.yojson_of_t range;of_string s])
-        )
+            QuickFixData.yojson_of_t (QuickFixData.{range; text = s})
+        ))
         in
       Some code
       | _ -> None in

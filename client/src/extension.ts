@@ -1,4 +1,4 @@
-import {workspace, window, commands, ExtensionContext,
+import {workspace, window, commands, languages, ExtensionContext,
   TextEditorSelectionChangeEvent,
   TextEditorSelectionChangeKind,
   TextEditor,
@@ -9,7 +9,9 @@ import {workspace, window, commands, ExtensionContext,
   StatusBarItem,
   extensions,
   StatusBarAlignment,
-  MarkdownString
+  MarkdownString,
+  TextEdit,
+  WorkspaceEdit
 } from 'vscode';
 
 import {
@@ -44,7 +46,7 @@ import {
 } from './utilities/utils';
 import { DocumentStateViewProvider } from './panels/DocumentStateViewProvider';
 import VsCoqToolchainManager, {ToolchainError, ToolChainErrorCode} from './utilities/toolchain';
-import { stat } from 'fs';
+import { QUICKFIX_COMMAND, CoqWarningQuickFix } from './QuickFixProvider';
 
 let client: Client;
 
@@ -190,6 +192,16 @@ export function activate(context: ExtensionContext) {
                 preserveFocus: true,
             }); 
             
+        });
+
+        context.subscriptions.push(commands.registerCommand(QUICKFIX_COMMAND, (data) => {
+            const {text, range, document} = data;
+            const edit = new WorkspaceEdit();
+            edit.replace(document.uri, range, text);
+            workspace.applyEdit(edit);
+        }));
+        languages.registerCodeActionsProvider('coq', new CoqWarningQuickFix(), {
+            providedCodeActionKinds: CoqWarningQuickFix.providedCodeActionKinds
         });
 
         client.onReady()
