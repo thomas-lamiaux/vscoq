@@ -245,25 +245,35 @@ let rec remove_or_truncate_range r = function
 
 let update_processed task state processing processed prepared document =
   match task with
-  | PDelegate {opener_id; terminator_id; } ->
+  | PDelegate {opener_id; terminator_id; last_step_id; } ->
     let opener_range = Document.range_of_id_with_blank_space document opener_id in
     let terminator_range = Document.range_of_id_with_blank_space document terminator_id in
     let range = Range.create ~end_:terminator_range.end_ ~start:opener_range.start in
-    begin match SM.find terminator_id state.of_sentence with
-    | (s, _) ->
-      begin match s with
-      | Done s ->
-        begin match s with
-        | Success _ ->
-          insert_or_merge_range range processed, remove_or_truncate_range range processing, remove_or_truncate_range range prepared
-        | Error _ ->
-          processed, remove_or_truncate_range range processing, remove_or_truncate_range range prepared
-        end
-      | _ -> processed, processing, prepared
+    let status = 
+      begin match last_step_id with
+      | None -> Done (Success None)
+      | Some id -> fst (SM.find id state.of_sentence)
       end
-    | exception Not_found ->
-      log @@ "Trying to get overview with non-existing state id " ^ Stateid.to_string terminator_id;
-      processed, processing, prepared
+    in
+    begin match status with
+    | Done s ->
+      begin match s with
+      | Success _ ->
+        log @@ "DELEGATED CAN BE DONE";
+        insert_or_merge_range range processed, remove_or_truncate_range range processing, remove_or_truncate_range range prepared
+      | Error _ ->
+        log @@ "DELEGATED CAN BE DONE WITH ERROR";
+        processed, remove_or_truncate_range range processing, remove_or_truncate_range range prepared
+      end
+    | Delegated (_, s) -> 
+      begin match s with
+      | None ->
+        log @@ "THE STATUS IS ALWAYS DELEGATED"; processed, processing, prepared
+      | Some (Sucess _) ->
+        log @@ "THE STATUS IS ALWAYS DELEGATED"; processed, processing, prepared
+      | Error _ ->
+        log @@ "THE STATUS IS ALWAYS DELEGATED"; processed, processing, prepared
+      end
     end
   | PSkip { id } | PExec { id } | PQuery { id } ->
     let range = Document.range_of_id_with_blank_space document id in
