@@ -265,15 +265,8 @@ let update_processed task state processing processed prepared document =
         log @@ "DELEGATED CAN BE DONE WITH ERROR";
         processed, remove_or_truncate_range range processing, remove_or_truncate_range range prepared
       end
-    | Delegated (_, s) -> 
-      begin match s with
-      | None ->
+    | Delegated _ -> 
         log @@ "THE STATUS IS ALWAYS DELEGATED"; processed, processing, prepared
-      | Some (Sucess _) ->
-        log @@ "THE STATUS IS ALWAYS DELEGATED"; processed, processing, prepared
-      | Error _ ->
-        log @@ "THE STATUS IS ALWAYS DELEGATED"; processed, processing, prepared
-      end
     end
   | PSkip { id } | PExec { id } | PQuery { id } ->
     let range = Document.range_of_id_with_blank_space document id in
