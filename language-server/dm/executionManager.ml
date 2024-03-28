@@ -243,48 +243,29 @@ let rec remove_or_truncate_range r = function
   else
     r1 :: (remove_or_truncate_range r l)
 
-let update_processed task state processing processed prepared document =
-  match task with
-  | PDelegate {opener_id; terminator_id; last_step_id; } ->
-    let opener_range = Document.range_of_id_with_blank_space document opener_id in
-    let terminator_range = Document.range_of_id_with_blank_space document terminator_id in
-    let range = Range.create ~end_:terminator_range.end_ ~start:opener_range.start in
-    let status = 
-      begin match last_step_id with
-      | None -> Done (Success None)
-      | Some id -> fst (SM.find id state.of_sentence)
-      end
-    in
-    begin match status with
+let update_processed id state document overview =
+  let {prepared; processing; processed} = overview in
+  let range = Document.range_of_id_with_blank_space document id in
+  match SM.find id state.of_sentence with
+  | (s, _) ->
+    begin match s with
     | Done s ->
       begin match s with
       | Success _ ->
-        log @@ "DELEGATED CAN BE DONE";
-        insert_or_merge_range range processed, remove_or_truncate_range range processing, remove_or_truncate_range range prepared
+        let processed = insert_or_merge_range range processed in
+        let processing = remove_or_truncate_range range processing in 
+        let prepared = remove_or_truncate_range range prepared in
+        {prepared; processing; processed}
       | Error _ ->
-        log @@ "DELEGATED CAN BE DONE WITH ERROR";
-        processed, remove_or_truncate_range range processing, remove_or_truncate_range range prepared
+        let processing = remove_or_truncate_range range processing in 
+        let prepared = remove_or_truncate_range range prepared in
+        {prepared; processing; processed}
       end
-    | Delegated _ -> 
-        log @@ "THE STATUS IS ALWAYS DELEGATED"; processed, processing, prepared
+    | _ -> log @@ "TRYING TO UPDATE DELEGATED ID: " ^ Stateid.to_string id; {prepared; processing; processed}
     end
-  | PSkip { id } | PExec { id } | PQuery { id } ->
-    let range = Document.range_of_id_with_blank_space document id in
-    match SM.find id state.of_sentence with
-    | (s, _) ->
-      begin match s with
-      | Done s ->
-        begin match s with
-        | Success _ ->
-          insert_or_merge_range range processed, remove_or_truncate_range range processing, remove_or_truncate_range range prepared
-        | Error _ ->
-          processed, remove_or_truncate_range range processing, remove_or_truncate_range range prepared
-        end
-      | _ -> processed, processing, prepared
-      end
-    | exception Not_found ->
-      log @@ "Trying to get overview with non-existing state id " ^ Stateid.to_string id;
-      processed, processing, prepared
+  | exception Not_found ->
+    log @@ "Trying to get overview with non-existing state id " ^ Stateid.to_string id;
+    {prepared; processing; processed}
 
 let update_processing task processing prepared document =
   match task with
@@ -298,8 +279,12 @@ let update_processing task processing prepared document =
     insert_or_merge_range range processing, remove_or_truncate_range range prepared
 
 let update_overview task todo state document overview =
-  let { processing; processed; prepared } = overview in
-  let processed, processing, prepared = update_processed task state processing processed prepared document in
+  let {processed; processing; prepared} = 
+  match task with 
+  | PDelegate _ -> overview
+  | PSkip { id } | PExec { id } | PQuery { id } ->
+    update_processed id state document overview
+  in
   let processing, prepared = match todo with
   | [] -> processing, prepared
   | next :: _ -> update_processing next processing prepared document in
@@ -361,28 +346,38 @@ let handle_feedback id fb state =
 let handle_event event state =
   match event with
   | LocalFeedback (q,_,id,fb) ->
-      Some (handle_feedback id fb state), [local_feedback q]
+      None, Some (handle_feedback id fb state), [local_feedback q]
   | ProofWorkerEvent event ->
       let update, events = ProofWorker.handle_event event in
-      let state =
+      let state, id =
         match update with
-        | None -> None
+        | None -> None, None
         | Some (ProofJob.AppendFeedback(_,id,fb)) ->
-            Some (handle_feedback id fb state)
+            Some (handle_feedback id fb state), None
         | Some (ProofJob.UpdateExecStatus(id,v)) ->
             match SM.find id state.of_sentence, v with
             | (Delegated (_,completion), fl), _ ->
                 Option.default ignore completion v;
-                Some (update_all id (Done v) fl state)
+                Some (update_all id (Done v) fl state), Some id
             | (Done (Success s), fl), Error (err,_) ->
                 (* This only happens when a Qed closing a delegated proof
                    receives an updated by a worker saying that the proof is
                    not completed *)
-                Some (update_all id (Done (Error (err,s))) fl state)
-            | (Done _, _), _ -> None
-            | exception Not_found -> None (* TODO: is this possible? *)
+                Some (update_all id (Done (Error (err,s))) fl state), Some id
+            | (Done _, _), _ -> None, None
+            | exception Not_found -> None, None (* TODO: is this possible? *)
       in
-      inject_proof_events state events
+      let state, events = inject_proof_events state events in
+      let log_change id state =
+      match SM.find id state.of_sentence with
+      | Done _, _ -> log @@ "STATUS WAS CHANGED"
+      | Delegated _, _ -> log @@ "STATUS IS STILL DELEGATED"
+      in
+      begin match (state, id) with
+      | (Some s, Some id) -> log_change id s
+      | _ -> ()
+      end;
+      id, state, events
 
 let find_fulfilled_opt x m =
   try
