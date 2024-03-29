@@ -232,7 +232,7 @@ let rec insert_or_merge_range r = function
 
 let rec remove_or_truncate_range r = function
 | [] -> []
-| r1 :: l ->
+| r1 :: l -> log @@ "RANGES"; log @@ "R1: " ^ Range.to_string r1; log @@ "R: " ^ Range.to_string r;
   if Position.compare r1.Range.start r.Range.start == 0 && 
     Position.compare r1.Range.end_ r.Range.end_ == 0
   then
@@ -244,6 +244,7 @@ let rec remove_or_truncate_range r = function
     r1 :: (remove_or_truncate_range r l)
 
 let update_processed id state document overview =
+  log @@ "UPDATING PROCESSED";
   let {prepared; processing; processed} = overview in
   let range = Document.range_of_id_with_blank_space document id in
   match SM.find id state.of_sentence with
@@ -252,12 +253,17 @@ let update_processed id state document overview =
     | Done s ->
       begin match s with
       | Success _ ->
+        log @@ "INSERTING TO PROCESSED";
         let processed = insert_or_merge_range range processed in
-        let processing = remove_or_truncate_range range processing in 
+        log @@ "TRUNCATING FROM PROCESSING";
+        let processing = remove_or_truncate_range range processing in
+        log @@ "TRUNCATING FROM PREPARED";
         let prepared = remove_or_truncate_range range prepared in
         {prepared; processing; processed}
       | Error _ ->
-        let processing = remove_or_truncate_range range processing in 
+        log @@ "TRUNCATING FROM PROCESSING";
+        let processing = remove_or_truncate_range range processing in
+        log @@ "TRUNCATING FROM PREPARED";
         let prepared = remove_or_truncate_range range prepared in
         {prepared; processing; processed}
       end
@@ -268,14 +274,26 @@ let update_processed id state document overview =
     {prepared; processing; processed}
 
 let update_processing task processing prepared document =
+  log @@ "UPDATING PROCESSING";
   match task with
-  | PDelegate { opener_id; terminator_id; } ->
+  | PDelegate { opener_id; terminator_id; tasks } ->
+    let opener_id = begin match tasks with
+    | [] -> opener_id
+    | t :: _ -> match t with
+      | PDelegate { opener_id } -> opener_id
+      | PSkip { id } | PExec { id } | PQuery { id } -> id
+    end
+    in
     let opener_range = Document.range_of_id_with_blank_space document opener_id in
     let terminator_range = Document.range_of_id_with_blank_space document terminator_id in
     let range = Range.create ~end_:terminator_range.end_ ~start:opener_range.start in
-    insert_or_merge_range range processing, remove_or_truncate_range range prepared
+    log @@ "DELEGATED JOB RANGE: " ^ Range.to_string range;
+    log @@ "TRUNCATING FROM PREPARED";
+    (* When a job is delegated we shouldn't merge ranges (to get the proper progress report) *)
+    List.append processing [ range ], remove_or_truncate_range range prepared
   | PSkip { id } | PExec { id } | PQuery { id } ->
     let range = Document.range_of_id_with_blank_space document id in
+    log @@ "TRUNCATING FROM PREPARED";
     insert_or_merge_range range processing, remove_or_truncate_range range prepared
 
 let update_overview task todo state document overview =
@@ -364,19 +382,10 @@ let handle_event event state =
                    receives an updated by a worker saying that the proof is
                    not completed *)
                 Some (update_all id (Done (Error (err,s))) fl state), Some id
-            | (Done _, _), _ -> None, None
+            | (Done _, _), _ -> None, Some id
             | exception Not_found -> None, None (* TODO: is this possible? *)
       in
       let state, events = inject_proof_events state events in
-      let log_change id state =
-      match SM.find id state.of_sentence with
-      | Done _, _ -> log @@ "STATUS WAS CHANGED"
-      | Delegated _, _ -> log @@ "STATUS IS STILL DELEGATED"
-      in
-      begin match (state, id) with
-      | (Some s, Some id) -> log_change id s
-      | _ -> ()
-      end;
       id, state, events
 
 let find_fulfilled_opt x m =

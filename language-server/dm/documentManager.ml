@@ -63,7 +63,10 @@ let inject_em_events events = List.map inject_em_event events
 type events = event Sel.Event.t list
 
 let print_exec_overview st =
-  let {processing; processed} = st.overview in
+  let {processing; processed; prepared} = st.overview in
+  log @@ "--------- Prepared ranges ---------";
+  List.iter (fun r -> log @@ Range.to_string r) prepared;
+  log @@ "-------------------------------------";
   log @@ "--------- Processing ranges ---------";
   List.iter (fun r -> log @@ Range.to_string r) processing;
   log @@ "-------------------------------------";
@@ -363,12 +366,17 @@ let handle_event ev st =
     (Some {st with execution_state; overview}, inject_em_events events @ [event])
   | ExecutionManagerEvent ev ->
     let id, execution_state_update, events = ExecutionManager.handle_event ev st.execution_state in
-    let overview = 
+    let st = 
       match (id, execution_state_update) with
-      | Some id, Some exec_st -> ExecutionManager.update_processed id exec_st st.document st.overview
-      | _, _ -> st.overview
+      | Some id, Some exec_st ->
+        let overview = ExecutionManager.update_processed id exec_st st.document st.overview in
+        {st with overview}
+      | Some id, None ->
+        let overview = ExecutionManager.update_processed id st.execution_state st.document st.overview in
+        {st with overview}
+      | _, _ -> st
     in
-    (Option.map (fun execution_state -> {st with execution_state; overview}) execution_state_update, inject_em_events events)
+    (Option.map (fun execution_state -> {st with execution_state}) execution_state_update, inject_em_events events)
 
 let get_proof st diff_mode pos =
   let previous_st id =
