@@ -492,6 +492,10 @@ let build_tasks_for sch st id =
   let vs, tasks = build_tasks id [] in
   vs, List.concat_map prepare_task tasks
 
+let build_tasks_for_sentences sch sentences =
+  let tasks = List.map (fun ({id}: Document.sentence) -> snd @@ task_for_sentence sch id) sentences in
+  List.concat_map prepare_task tasks
+
 let all_errors st =
   List.fold_left (fun acc (id, (p,_)) ->
     match p with

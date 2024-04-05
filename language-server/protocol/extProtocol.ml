@@ -226,6 +226,24 @@ module Request = struct
 
   end
 
+  module CoqPilotParams = struct
+
+    type t = {
+      textDocument : TextDocumentIdentifier.t;
+      position: Position.t;
+      text: string;
+    } [@@deriving yojson]
+
+  end
+
+  module CoqPilotResult = struct
+
+    type t = {
+      errors: string list;
+    } [@@deriving yojson]
+
+  end
+
   type 'a t =
   | Std : 'a Lsp.Client_request.t -> 'a t
   | Reset : ResetParams.t -> unit t
@@ -235,6 +253,7 @@ module Request = struct
   | Print : PrintParams.t -> pp t
   | Search : SearchParams.t -> unit t
   | DocumentState : DocumentStateParams.t -> DocumentStateResult.t t
+  | CoqPilot : CoqPilotParams.t -> CoqPilotResult.t t
 
   type packed = Pack : 'a t -> packed
 
@@ -276,6 +295,7 @@ module Request = struct
       | Print _ -> yojson_of_pp resp
       | Search _ -> yojson_of_unit resp
       | DocumentState _ -> DocumentStateResult.(yojson_of_t resp)
+      | CoqPilot _ -> CoqPilotResult.(yojson_of_t resp)
       | Std req -> Lsp.Client_request.yojson_of_result req resp
 
   end
