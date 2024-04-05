@@ -3,7 +3,7 @@ import { PpString } from '../types';
 
 enum PpMode { vertical,  horizontal }
 
-const fragmentOfPpStringWithMode = (pp:PpString, mode: PpMode, classes:CSSModuleClasses) : ReactFragment => {
+const fragmentOfPpStringWithMode = (pp:PpString, mode: PpMode, classes:CSSModuleClasses, wrapped:boolean = false, indent:number = 0) : ReactFragment => {
     switch (pp[0]) {
         case "Ppcmd_empty":
             return <></>;
@@ -43,6 +43,6 @@ const fragmentOfPpStringWithMode = (pp:PpString, mode: PpMode, classes:CSSModule
     }
 };
 
-export const fragmentOfPpString = (pp:PpString, classes:CSSModuleClasses) : ReactFragment => {
+export const fragmentOfPpString = (pp:PpString, classes:CSSModuleClasses, wrapped:boolean = false, indent:number=0) : ReactFragment => {
     return fragmentOfPpStringWithMode(pp, PpMode.horizontal, classes);
 };
