@@ -1,34 +1,34 @@
 import { ReactElement, ReactFragment } from 'react';
-import { PpString } from '../types';
+import { PpString, PpMode } from '../types';
+import PpBox from './pp-box';
+import PpGlue from './pp-glue';
 
-enum PpMode { vertical,  horizontal }
-
-const fragmentOfPpStringWithMode = (pp:PpString, mode: PpMode, classes:CSSModuleClasses, wrapped:boolean = false, indent:number = 0) : ReactFragment => {
+export const fragmentOfPpStringWithMode = (pp:PpString, mode: PpMode, classes:CSSModuleClasses, wrapped:boolean = false, indent:number = 0) : ReactFragment => {
     switch (pp[0]) {
         case "Ppcmd_empty":
             return <></>;
         case "Ppcmd_string":
             return pp[1];
         case "Ppcmd_glue":
-            return pp[1].map(pp => fragmentOfPpStringWithMode(pp, mode, classes));
+            return (
+                <PpGlue
+                    mode={mode}
+                    indent={indent}
+                    gluedElements={pp[1]}
+                    classes={classes}
+                />
+            );
         case "Ppcmd_box":
-          switch (pp[1][0]) {
-              case "Pp_hbox":
-                  mode = PpMode.horizontal;
-                  break;
-              case "Pp_vbox":
-                  mode = PpMode.vertical;
-                  break;
-              case "Pp_hvbox":
-                  mode = PpMode.horizontal; // TODO proper support for hvbox
-                  break;
-              case "Pp_hovbox":
-                  mode = PpMode.horizontal; // TODO proper support for hovbox
-                  break;
-          };
-          return fragmentOfPpStringWithMode(pp[2], mode, classes);
+            return (
+                <PpBox 
+                    mode={pp[1][0]}
+                    indent={pp[1][0] === PpMode.horizontal ? 0 : pp[1][1]}
+                    ppString={pp[2]}
+                    classes={classes}
+                />
+            );
         case "Ppcmd_tag":
-            return <span className={classes[pp[1].replaceAll(".", "-")]}>{fragmentOfPpStringWithMode(pp[2], mode, classes)}</span>;
+            return <span className={classes[pp[1].replaceAll(".", "-")]}>{fragmentOfPpStringWithMode(pp[2], mode, classes, wrapped, indent)}</span>;
         case "Ppcmd_print_break":
             switch (mode) {
                 case PpMode.horizontal:

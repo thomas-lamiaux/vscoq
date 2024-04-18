@@ -3,17 +3,16 @@ import useResizeObserver from '@react-hook/resize-observer';
 import { fragmentOfPpStringWithMode } from './pp';
 import {PpMode, PpString} from '../types';
 
-type PpBoxProps = {
+type PpGlueProps = {
     mode: PpMode,
     indent?: number,
-    ppString: PpString,
+    gluedElements: PpString[],
     classes: CSSModuleClasses
 };
 
-const ppBox : FunctionComponent<PpBoxProps> = (props) => {
+const ppGlue : FunctionComponent<PpGlueProps> = (props) => {
     
-    const {mode, indent, ppString, classes} = props;
-    const [wrappedElements, setWrappedElements] = useState<number[]>([]);
+    const {mode, indent, gluedElements, classes} = props;
 
     const target = useRef<HTMLSpanElement>(null);
 
@@ -45,14 +44,33 @@ const ppBox : FunctionComponent<PpBoxProps> = (props) => {
     // });
 
     const wrapped = checkOverflow(target.current);
+    const elements = gluedElements.map(pp => {
+        if(pp[0] === "Ppcmd_print_break") {
+            switch(mode) {
+                case PpMode.horizontal:
+                    return " ".repeat(pp[1]);
+                case PpMode.vertical:
+                    return <br/>;
+                case PpMode.hvBox:
+                    if(wrapped) {
+                        return <br/>;
+                    }
+                case PpMode.hovBox:
+                    if(wrapped) {
+                        return <><br/><span>{" ".repeat(indent ? indent : 0)}</span></>;
+                    }
+            }
+            
+        }
+    });
 
     return (
         <span ref={target}>
             {
-                fragmentOfPpStringWithMode(ppString, mode, classes, wrapped, indent)
+                elements
             }
         </span>
     );
 };
 
-export default ppBox;
+export default ppGlue;
