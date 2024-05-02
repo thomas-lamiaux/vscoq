@@ -3,48 +3,23 @@ import useResizeObserver from '@react-hook/resize-observer';
 import { fragmentOfPpStringWithMode } from './pp';
 import {PpMode, PpString} from '../types';
 
+import classeNames from './PpGlue.module.css';
+
 type PpGlueProps = {
     mode: PpMode,
     indent?: number,
+    wrapped: number, 
     gluedElements: PpString[],
     classes: CSSModuleClasses
 };
 
 const ppGlue : FunctionComponent<PpGlueProps> = (props) => {
     
-    const {mode, indent, gluedElements, classes} = props;
+    const {mode, wrapped, indent, gluedElements, classes} = props;
 
-    const target = useRef<HTMLSpanElement>(null);
+    let numWrapped = 0;
 
-    const checkOverflow = (textContainer: HTMLSpanElement | null): boolean => {
-        if (textContainer){
-          return (
-            textContainer.offsetHeight < textContainer.scrollHeight || textContainer.offsetWidth < textContainer.scrollWidth
-          );
-        }
-        return false;
-      };
-
-    // useResizeObserver(target, () => {
-    //     if(target.current) {
-    //         let prevItem : DOMRect | null = null;
-    //         let currItem : DOMRect;
-    //         let index = 0;
-    //         const wrapped = [];
-    //         for(const child of target.current.children) {
-    //             currItem = child.getBoundingClientRect();
-    //             if(prevItem !== null && currItem.top < prevItem.top) {
-    //                 wrapped.push(index);
-    //             }
-    //             prevItem = currItem;
-    //             index++;
-    //         }
-    //         setWrappedElements(wrapped);
-    //     }
-    // });
-
-    const wrapped = checkOverflow(target.current);
-    const elements = gluedElements.map(pp => {
+    const elements = gluedElements.map((pp) => {
         if(pp[0] === "Ppcmd_print_break") {
             switch(mode) {
                 case PpMode.horizontal:
@@ -56,20 +31,28 @@ const ppGlue : FunctionComponent<PpGlueProps> = (props) => {
                         return <br/>;
                     }
                 case PpMode.hovBox:
-                    if(wrapped) {
-                        return <><br/><span>{" ".repeat(indent ? indent : 0)}</span></>;
+                    if(numWrapped < wrapped) {
+                        numWrapped = numWrapped + 1;
+                        return (<>
+                                    <br/>
+                                    <span>
+                                        {" ".repeat(indent ? indent : 0)}
+                                    </span>
+                                </>);
                     }
+                    return " ".repeat(indent ? indent : 1);
             }
-            
+        } else {
+            return fragmentOfPpStringWithMode(pp, mode, classes, wrapped, indent);
         }
     });
 
     return (
-        <span ref={target}>
+        <>
             {
                 elements
             }
-        </span>
+        </>
     );
 };
 

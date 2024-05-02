@@ -3,7 +3,7 @@ import { PpString, PpMode } from '../types';
 import PpBox from './pp-box';
 import PpGlue from './pp-glue';
 
-export const fragmentOfPpStringWithMode = (pp:PpString, mode: PpMode, classes:CSSModuleClasses, wrapped:boolean = false, indent:number = 0) : ReactFragment => {
+export const fragmentOfPpStringWithMode = (pp:PpString, mode: PpMode, classes:CSSModuleClasses, wrapped:number = 0, indent:number = 0) : ReactFragment => {
     switch (pp[0]) {
         case "Ppcmd_empty":
             return <></>;
@@ -13,6 +13,7 @@ export const fragmentOfPpStringWithMode = (pp:PpString, mode: PpMode, classes:CS
             return (
                 <PpGlue
                     mode={mode}
+                    wrapped={wrapped}
                     indent={indent}
                     gluedElements={pp[1]}
                     classes={classes}
@@ -43,6 +44,6 @@ export const fragmentOfPpStringWithMode = (pp:PpString, mode: PpMode, classes:CS
     }
 };
 
-export const fragmentOfPpString = (pp:PpString, classes:CSSModuleClasses, wrapped:boolean = false, indent:number=0) : ReactFragment => {
+export const fragmentOfPpString = (pp:PpString, classes:CSSModuleClasses) : ReactFragment => {
     return fragmentOfPpStringWithMode(pp, PpMode.horizontal, classes);
 };
