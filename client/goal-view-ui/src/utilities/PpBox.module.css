@@ -2,6 +2,12 @@
     white-space: nowrap;
     width: 100%;
     overflow: hidden;
+    display: block;
+}
+
+.SpanContent {
+    width: max-content;
+    display: inline-block;
 }
 
 .Box {
