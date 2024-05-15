@@ -2,6 +2,8 @@ import { FunctionComponent, ReactFragment, useRef, useState, useEffect, useLayou
 import { PpString, PpMode } from '../types';
 import PpBreak from './pp-break';
 
+import classes from './Pp.module.css';
+
 
 type PpProps = {
     pp: PpString;
@@ -13,8 +15,9 @@ const ppDisplay : FunctionComponent<PpProps> = (props) => {
     const {pp, coqCss} = props;
 
     const [maxBreaks, setMaxBreaks] = useState<number>(0);
-    const [neededBreaks, setNeddedBreaks] = useState<number>(0);
-    const [numBreaks, setNumBreaks] = useState<number>(0);
+    const [neededBreaks, setNeededBreaks] = useState<number>(0);
+    const [possibleBreakIds, setPossibleBreakIds] = useState<number[]>([]);
+    const [breakIds, setBreakIds] = useState<number[]>([]);
     const container = useRef<HTMLDivElement>(null);
     const content = useRef<HTMLSpanElement>(null);
 
@@ -22,10 +25,21 @@ const ppDisplay : FunctionComponent<PpProps> = (props) => {
     useEffect(() => {
         const computedMaxBreaks = computeNumBreaks(pp, 0);
         console.log("COMPUTED NUM BREAKS: ", computedMaxBreaks);
-        setMaxBreaks(computedMaxBreaks);
+        computeNeededBreaks(maxBreaks);
+        setMaxBreaks(computeNumBreaks(pp, 0));
+        getBreakIds(pp, 0);
     }, []);
 
+    useEffect(() => {
+        setBreakIds(possibleBreakIds.slice(0, neededBreaks));
+    }, [neededBreaks]);
+
     useLayoutEffect(() => {
+        computeNeededBreaks(maxBreaks);
+    });
+
+    const computeNeededBreaks = (maxBreaks: number) => {
+
         if(container.current) {
             if(content.current) {
                 const containerRect = container.current.getBoundingClientRect();
@@ -34,12 +48,14 @@ const ppDisplay : FunctionComponent<PpProps> = (props) => {
                 console.log("content width: " + contentRect.width);
                 if(containerRect.width < contentRect.width) {
                     if(neededBreaks < maxBreaks) {
-                        setNeddedBreaks(neededBreaks + 1);
+                        console.log("Setting needed breaks: " + (neededBreaks + 1));
+                        setNeededBreaks((neededBreaks) => {return neededBreaks + 1;});
                     }
                 }
             }
         }
-    });
+
+    };
 
     const computeNumBreaks = (pp: PpString, acc: number) : number => {
         switch(pp[0]) {
@@ -48,9 +64,9 @@ const ppDisplay : FunctionComponent<PpProps> = (props) => {
             case "Ppcmd_string":
                 return acc;
             case "Ppcmd_glue":
-                return pp[1].reduce((accu, pps) => {
-                    return accu + computeNumBreaks(pps, accu);
-                }, acc);
+                const nbBreaks = pp[1].map(pp => computeNumBreaks(pp, 0));
+                const nb = nbBreaks.reduce((pv, cv) => {return pv + cv;}, 0);
+                return acc + nb;
             case "Ppcmd_box":
             case "Ppcmd_tag":
                 return computeNumBreaks(pp[2], acc);
@@ -63,11 +79,36 @@ const ppDisplay : FunctionComponent<PpProps> = (props) => {
         }
     };
 
+    const getBreakIds = (pp: PpString, id: number) => {
+        switch(pp[0]) {
+            case "Ppcmd_empty":
+                return;
+            case "Ppcmd_string":
+                return;
+            case "Ppcmd_glue":
+                pp[1].map((pp, index) => getBreakIds(pp, id + index + 1));
+                return;
+            case "Ppcmd_box":
+            case "Ppcmd_tag":
+                getBreakIds(pp[2], id + 1);
+                return;
+            case "Ppcmd_print_break":
+                setPossibleBreakIds((possibleBreakIds) => {
+                    return possibleBreakIds.concat([id]);
+                });
+                return;
+            case "Ppcmd_force_newline":
+                return;
+            case "Ppcmd_comment":
+                return;
+        }
+    };
 
+    console.log("NEEDED BREAKS: " + neededBreaks);
     return (
-        <div ref={container}>
-            <span ref={content}>
-                {fragmentOfPpString(pp, coqCss, neededBreaks, numBreaks, (number) => setNumBreaks(number))}
+        <div ref={container} className={classes.Container}>
+            <span ref={content} className={classes.Content}>
+                {fragmentOfPpString(pp, coqCss, 0, breakIds)}
             </span>
         </div>
     );
@@ -79,9 +120,8 @@ const fragmentOfPpStringWithMode = (
     pp:PpString,
     mode: PpMode,
     coqCss:CSSModuleClasses,
-    neededBreaks:number,
-    numBreaks:number,
-    setNumBreaksCallback: (n:number) => void,
+    id: number,
+    breakIds: number[],
     indent:number = 0
 ) : ReactFragment => {
     switch (pp[0]) {
@@ -90,27 +130,30 @@ const fragmentOfPpStringWithMode = (
         case "Ppcmd_string":
             return pp[1];
         case "Ppcmd_glue":
-            return pp[1].map((pp) => {
-                fragmentOfPpStringWithMode(pp, mode, coqCss, neededBreaks, numBreaks, setNumBreaksCallback, indent);
+            return pp[1].map((pp, index) => {
+                return fragmentOfPpStringWithMode(pp, mode, coqCss, id + index + 1, breakIds, indent);
             });
         case "Ppcmd_box":
+            const m = pp[1][0];
+            const i = (m !== PpMode.horizontal) ? pp[1][1] : 0;
             return (
-                fragmentOfPpStringWithMode(pp[2], pp[1][0], coqCss, neededBreaks, numBreaks, setNumBreaksCallback, indent)
+                fragmentOfPpStringWithMode(pp[2], m, coqCss, id + 1, breakIds, i + indent)
             );
         case "Ppcmd_tag":
             return (
                 <span className={coqCss[pp[1].replaceAll(".", "-")]}>
-                    {fragmentOfPpStringWithMode(pp[2], mode, coqCss, neededBreaks, numBreaks, setNumBreaksCallback, indent)}
+                    {fragmentOfPpStringWithMode(pp[2], mode, coqCss, id + 1, breakIds, indent)}
                 </span>
             );
         case "Ppcmd_print_break":
-            <PpBreak 
+            console.log("ID:" + id);
+            console.log("BREAK IDS: " + breakIds);
+            const lineBreak = breakIds.find(breakId => breakId === id) !== undefined;
+            return <PpBreak 
                 mode={mode}
                 horizontalIndent={pp[1]}
                 indent={indent}
-                numBreaks={numBreaks}
-                neededBreaks={neededBreaks}
-                setNumBreaksCallback={setNumBreaksCallback}
+                lineBreak={lineBreak}
             />;
         case "Ppcmd_force_newline":
             return <br/>;
@@ -121,11 +164,10 @@ const fragmentOfPpStringWithMode = (
 
 const fragmentOfPpString = (
     pp:PpString, coqCss:CSSModuleClasses,
-    neededBreaks:number,
-    numBreaks:number,
-    setNumBreaksCallback: (n:number) => void
+    id: number,
+    breakIds: number[]
 ) : ReactFragment => {
-    return fragmentOfPpStringWithMode(pp, PpMode.horizontal, coqCss, neededBreaks, numBreaks, setNumBreaksCallback);
+    return fragmentOfPpStringWithMode(pp, PpMode.horizontal, coqCss, id, breakIds);
 };
 
 export default ppDisplay;

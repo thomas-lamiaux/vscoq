@@ -5,39 +5,23 @@ type PpBreakProps = {
     mode: PpMode,
     horizontalIndent: number, 
     indent: number,
-    numBreaks: number,
-    neededBreaks: number,
-    setNumBreaksCallback: (n: number) => void,
+    lineBreak: boolean 
 };
 
 const ppBreak: FunctionComponent<PpBreakProps> = (props) => {
     
-    const {mode, numBreaks, neededBreaks, setNumBreaksCallback, indent, horizontalIndent} = props;
-    const [lineBreak, setLineBreak] = useState<boolean>(false);
+    const {mode, lineBreak, indent, horizontalIndent} = props;
 
-    useEffect(() => {
-        if(neededBreaks) {
-            if(numBreaks < neededBreaks) {
-                if(!lineBreak) {
-                    setLineBreak(true);
-                    setNumBreaksCallback(numBreaks + 1);
-                }
-            }
-        } else {
-            setLineBreak(false);
-        }
-    });
-            
     switch(mode) {
         case PpMode.horizontal:
-            return <>{" ".repeat(horizontalIndent)}</>;
+            return <span>{" ".repeat(horizontalIndent)}</span>;
         case PpMode.vertical:
             return <br/>;
         case PpMode.hvBox:
             if(lineBreak) {
                 return <br/>;
             }
-            return <></>;
+            return <span> </span>;
         case PpMode.hovBox:
             if(lineBreak) {
                 return (
@@ -49,7 +33,7 @@ const ppBreak: FunctionComponent<PpBreakProps> = (props) => {
                     </>
                 );
             }
-            return<></>;
+            return <span> </span>;
     }
 };
 
