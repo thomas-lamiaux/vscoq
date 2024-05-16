@@ -1,4 +1,6 @@
 import { FunctionComponent, ReactFragment, useRef, useState, useEffect, useLayoutEffect } from 'react';
+import useResizeObserver from '@react-hook/resize-observer';
+import {ResizeObserverEntry} from '@juggle/resize-observer';
 import { PpString, PpMode } from '../types';
 import PpBreak from './pp-break';
 
@@ -18,13 +20,31 @@ const ppDisplay : FunctionComponent<PpProps> = (props) => {
     const [neededBreaks, setNeededBreaks] = useState<number>(0);
     const [possibleBreakIds, setPossibleBreakIds] = useState<number[]>([]);
     const [breakIds, setBreakIds] = useState<number[]>([]);
+    const [lastEntry, setLastEntry] = useState<ResizeObserverEntry|null>(null);
     const container = useRef<HTMLDivElement>(null);
     const content = useRef<HTMLSpanElement>(null);
 
+    useResizeObserver(container, (entry) => {
+        
+        if(container.current) {
+            if(content.current) {
+                if(lastEntry) {
+                    if(Math.abs(entry.contentRect.width - lastEntry.contentRect.width) <= 10) {return;}
+                    console.log("ENTRIES: " + entry.contentRect.width + ", " + lastEntry.contentRect.width);
+                    if(entry.contentRect.width > lastEntry.contentRect.width) {
+                        setNeededBreaks(0);
+                    } else {
+                        computeNeededBreaks(maxBreaks);
+                    }
+                } else {
+                    computeNeededBreaks(maxBreaks);
+                }
+            }
+        }
+        setLastEntry(entry);
+    });
 
     useEffect(() => {
-        const computedMaxBreaks = computeNumBreaks(pp, 0);
-        console.log("COMPUTED NUM BREAKS: ", computedMaxBreaks);
         computeNeededBreaks(maxBreaks);
         setMaxBreaks(computeNumBreaks(pp, 0));
         getBreakIds(pp, 0);

@@ -14,13 +14,10 @@ const hypothesis: FunctionComponent<HypothesisProps> = (props) => {
 
     return (
         <div className={classes.Hypothesis}>
-            <div className={classes.Content}>
-                <PpDisplay 
-                    pp={content}
-                    coqCss={classes}
-                />
-            </div>
-            <br/>
+            <PpDisplay 
+                pp={content}
+                coqCss={classes}
+            />
         </div>
     );
 };
