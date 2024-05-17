@@ -12,6 +12,12 @@ type PpProps = {
     coqCss: CSSModuleClasses;
 };
 
+type Box = {
+    mode: PpMode;
+    possibleBreaks: number[];
+    breaks: number[];
+};
+
 const ppDisplay : FunctionComponent<PpProps> = (props) => {
     
     const {pp, coqCss} = props;
@@ -20,6 +26,7 @@ const ppDisplay : FunctionComponent<PpProps> = (props) => {
     const [neededBreaks, setNeededBreaks] = useState<number>(0);
     const [possibleBreakIds, setPossibleBreakIds] = useState<number[]>([]);
     const [breakIds, setBreakIds] = useState<number[]>([]);
+    const [boxes, setBoxes] = useState<Box[]>([]);
     const [lastEntry, setLastEntry] = useState<ResizeObserverEntry|null>(null);
     const container = useRef<HTMLDivElement>(null);
     const content = useRef<HTMLSpanElement>(null);
@@ -45,8 +52,9 @@ const ppDisplay : FunctionComponent<PpProps> = (props) => {
     });
 
     useEffect(() => {
-        computeNeededBreaks(maxBreaks);
-        setMaxBreaks(computeNumBreaks(pp, 0));
+        const breaks = computeNumBreaks(pp, 0);
+        setMaxBreaks(breaks);
+        computeNeededBreaks(breaks);
         getBreakIds(pp, 0);
     }, []);
 
@@ -99,6 +107,59 @@ const ppDisplay : FunctionComponent<PpProps> = (props) => {
         }
     };
 
+    const computeBoxBreaks = (pp: PpString, acc: number) : number => {
+        switch(pp[0]) {
+            case "Ppcmd_empty":
+                return acc;
+            case "Ppcmd_string":
+                return acc;
+            case "Ppcmd_glue":
+                const nbBreaks = pp[1].map(pp => computeBoxBreaks(pp, 0));
+                const nb = nbBreaks.reduce((pv, cv) => {return pv + cv;}, 0);
+                return acc + nb;
+            case "Ppcmd_box":
+                return acc;
+            case "Ppcmd_tag":
+                return computeBoxBreaks(pp[2], acc);
+            case "Ppcmd_print_break":
+                return acc + 1;
+            case "Ppcmd_force_newline":
+                return acc;
+            case "Ppcmd_comment":
+                return acc;
+        }
+    };
+
+    // const getBoxes = (pp: PpString, id: number) => {
+    //     switch(pp[0]) {
+    //         case "Ppcmd_empty":
+    //             return;
+    //         case "Ppcmd_string":
+    //             return;
+    //         case "Ppcmd_glue":
+    //             pp[1].map((pp, index) => getBreakIds(pp, id + index + 1));
+    //             return;
+    //         case "Ppcmd_box":
+    //             const breaks = computeBoxBreaks(pp[2], id + 1);
+                
+    //             setPossibleBreakIds((possibleBreakIds) => {
+    //                 return possibleBreakIds.concat(breaks);
+    //             });
+    //         case "Ppcmd_tag":
+    //             getBreakIds(pp[2], id + 1);
+    //             return;
+    //         case "Ppcmd_print_break":
+    //             // setPossibleBreakIds((possibleBreakIds) => {
+    //             //     return possibleBreakIds.concat([id]);
+    //             // });
+    //             return;
+    //         case "Ppcmd_force_newline":
+    //             return;
+    //         case "Ppcmd_comment":
+    //             return;
+    //     }
+    // };
+
     const getBreakIds = (pp: PpString, id: number) => {
         switch(pp[0]) {
             case "Ppcmd_empty":
@@ -109,13 +170,17 @@ const ppDisplay : FunctionComponent<PpProps> = (props) => {
                 pp[1].map((pp, index) => getBreakIds(pp, id + index + 1));
                 return;
             case "Ppcmd_box":
+                const breaks = computeBoxBreaks(pp[2], id + 1);
+                setPossibleBreakIds((possibleBreakIds) => {
+                    return possibleBreakIds.concat(breaks);
+                });
             case "Ppcmd_tag":
                 getBreakIds(pp[2], id + 1);
                 return;
             case "Ppcmd_print_break":
-                setPossibleBreakIds((possibleBreakIds) => {
-                    return possibleBreakIds.concat([id]);
-                });
+                // setPossibleBreakIds((possibleBreakIds) => {
+                //     return possibleBreakIds.concat([id]);
+                // });
                 return;
             case "Ppcmd_force_newline":
                 return;
@@ -136,7 +201,7 @@ const ppDisplay : FunctionComponent<PpProps> = (props) => {
 };
 
 
-const fragmentOfPpStringWithMode = (
+export const fragmentOfPpStringWithMode = (
     pp:PpString,
     mode: PpMode,
     coqCss:CSSModuleClasses,
